@@ -12,6 +12,7 @@ from xml.etree import ElementTree
 import requests
 from flask import Flask
 from flask_wtf.csrf import CSRFProtect
+import pytz
 
 HA_TOKEN = os.getenv('HA_TOKEN')
 if not HA_TOKEN:
@@ -64,9 +65,52 @@ weather = {}
 poll_world_weather = True
 
 ### Global Functions
+def convert_to_central_time(utc_string):
+    utc_time = datetime.datetime.fromisoformat(utc_string)
+    chicago = pytz.timezone('America/Chicago')
+    chicago_time = utc_time.replace(tzinfo=pytz.utc).astimezone(chicago)
+    return chicago_time
+
 def gen_timestamp():
     now = datetime.datetime.now()
     return now.isoformat().split('T')[1].split('.')[0]
+
+def calc_wind_arrow(bearing):
+    if bearing > 330:
+        dir = 'North'
+    elif bearing > 300:
+        dir = 'Northwest'
+    elif bearing > 240:
+        dir = 'West'
+    elif bearing > 200:
+        dir = 'Southwest'
+    elif bearing > 150:
+        dir = 'South'
+    elif bearing > 120:
+        dir = 'Southeast'
+    elif bearing > 70:
+        dir = 'East'
+    elif bearing > 20:
+        dir = 'Northeast'
+    else:
+        dir = 'North'
+
+    if dir == 'West':
+        return '\u2190'
+    elif dir == 'North':
+        return '\u2191'
+    elif dir == 'East':
+        return '\u2192'
+    elif dir == 'South':
+        return '\u2193'
+    elif dir == 'Northwest':
+        return '\u2196'
+    elif dir == 'Northeast':
+        return '\u2197'
+    elif dir == 'Southeast':
+        return '\u2198'
+    elif dir == 'Southwest':
+        return '\u2199'
 
 def start_threads():
     wuptime = None
@@ -84,7 +128,7 @@ def start_threads():
             wthread = threading.Thread(target=refresh_worldweather)
             wthread.start()
             wuptime = datetime.datetime.now()
-        time.sleep(30)
+        time.sleep(5)
 
 def refresh_worldweather():
     global poll_world_weather
@@ -153,6 +197,9 @@ def refresh_worldweather():
     return weather
 
 def fetch_ha_states():
+    timestamp = datetime.datetime.now().isoformat().split('.')[0]
+    today_date = timestamp.split('T')[0]
+
     # Fetch states
     log.info('Fetching states from HomeAssistant.')
     url = HA_API + '/states'
@@ -161,6 +208,44 @@ def fetch_ha_states():
 
     # Process states
     for item in state_list:
+        # Sun and Weather
+        if item['entity_id'] == 'sensor.sun_next_rising':
+            chicago_time = convert_to_central_time(item['state'])
+            next_dawn = chicago_time.isoformat().split('T')[1].split('-')[0]
+            states['next_dawn'] = next_dawn
+        if item['entity_id'] == 'sensor.sun_next_setting':
+            chicago_time = convert_to_central_time(item['state'])
+            next_dusk = chicago_time.isoformat().split('T')[1].split('-')[0]
+            states['next_dusk'] = next_dusk
+        if item['entity_id'] == 'sun.sun':
+            states['sun_status'] = item['state']
+        if item['entity_id'] == 'weather.forecast_home':
+            states['weather'] = item['state']
+            temperat = str(item['attributes']['temperature']) + item['attributes']['temperature_unit']
+            states['temperature'] = temperat
+            hum = str(item['attributes']['humidity']) + '%'
+            states['humidity'] = hum
+            uv = str(item['attributes']['uv_index'])
+            states['uv'] = uv
+            pressure = str(item['attributes']['pressure']) + item['attributes']['pressure_unit']
+            states['pressure'] = pressure
+            wind_speed = str(item['attributes']['wind_speed']) + item['attributes']['wind_speed_unit']
+            wind_arrow = calc_wind_arrow(int(item['attributes']['wind_bearing']))
+            wind = wind_speed + ' ' + wind_arrow + str(int(item['attributes']['wind_bearing']))
+            states['wind'] = wind
+        if item['entity_id'] == 'calendar.united_states_mo':
+            holiday = item['attributes']['message']
+            holiday_start = item['attributes']['start_time']
+            holiday_start_trim = holiday_start.split(' ')[0]
+            if today_date == holiday_start_trim:
+                holiday_flashy = f"* {holiday} *"
+                holiday_trim = holiday_flashy[0:MAX_WIDTH]
+                states['holiday'] = holiday_trim
+        # Laundry
+        if item['entity_id'] == 'switch.switch_washer':
+            states['washer_switch'] = item['state']
+        if item['entity_id'] == 'switch.switch_dryer':
+            states['dryer_switch'] = item['state']
         if item['entity_id'] == 'sensor.washer_1min':
             rounded_reading = float(item['state']) // 1
             msg = str(rounded_reading) + 'W/min'
@@ -183,18 +268,24 @@ def fetch_ha_states():
             dryer_cost = round(rounded_reading * 0.092, 2)
             dryer_cost_msg = str(dryer_cost) + '/mon'
             states['dryer_1mon_cost'] = dryer_cost_msg
-        if item['entity_id'] == 'weather.forecast_home':
-            states['weather'] = item['state']
-            temperat = str(item['attributes']['temperature']) + item['attributes']['temperature_unit']
-            states['temperature'] = temperat
-            hum = str(item['attributes']['humidity']) + '%'
-            states['humidity'] = hum
-            uv = str(item['attributes']['uv_index'])
-            states['uv'] = uv
+        # Indoor Conditions and Air
+        if item['entity_id'] == 'switch.air_filter':
+            states['air_filter'] = item['state']
+        if item['entity_id'] == 'sensor.air_detector_battery':
+            states['air_detector_battery'] = str(int(float(item['state']))) + '%'
         if item['entity_id'] == 'sensor.air_detector_humidity':
             states['indoor_humidity'] = str(int(float(item['state']))) + '%'
         if item['entity_id'] == 'sensor.air_detector_temperature':
             states['indoor_temperature'] = item['state'] + item['attributes']['unit_of_measurement']
+        if item['entity_id'] == 'sensor.air_detector_carbon_dioxide':
+            states['air_detector_carbon_dioxide'] = item['state'] + item['attributes']['unit_of_measurement']
+        if item['entity_id'] == 'sensor.air_detector_formaldehyde':
+            states['air_detector_formaldehyde'] = item['state'] + item['attributes']['unit_of_measurement']
+        if item['entity_id'] == 'sensor.air_detector_pm2_5':
+            states['air_detector_pm2_5'] = item['state'] + item['attributes']['unit_of_measurement']
+        if item['entity_id'] == 'sensor.air_detector_vocs':
+            states['air_detector_vocs'] = item['state'] + item['attributes']['unit_of_measurement']
+        # Devices
         if item['entity_id'] == 'vacuum.roomba':
             states['roomba_status'] = item['state']
             if 'battery_level' in item['attributes']:
@@ -205,6 +296,60 @@ def fetch_ha_states():
                 states['roomba_bin_full'] = str(item['attributes']['bin_full'])
             else:
                 states['roomba_bin_full'] = '?'
+        if item['entity_id'] == 'switch.fan':
+            states['fan_switch'] = item['state']
+        if item['entity_id'] == 'switch.living_room_nw_corner':
+            states['living_room_lights_nw_corner'] = item['state']
+        if item['entity_id'] == 'switch.living_room_sw_corner':
+            states['living_room_lights_sw_corner'] = item['state']
+        if item['entity_id'] == 'sensor.canon_lbp632c_canon_cartridge_067_black_toner':
+            states['printer_black_toner'] = item['state'] + '%'
+        if item['entity_id'] == 'sensor.canon_lbp632c_canon_cartridge_067_cyan_toner':
+            states['printer_cyan_toner'] = item['state'] + '%'
+        if item['entity_id'] == 'sensor.canon_lbp632c_canon_cartridge_067_magenta_to':
+            states['printer_magenta_toner'] = item['state'] + '%'
+        if item['entity_id'] == 'sensor.canon_lbp632c_canon_cartridge_067_yellow_ton':
+            states['printer_yellow_toner'] = item['state'] + '%'
+        if item['entity_id'] == 'switch.main_tv':
+            states['main_tv_status'] = item['state']
+        # Automations
+        if item['entity_id'] == 'automation.notify_when_laundry_washer_is_done':
+            initial_timestamp = item['attributes']['last_triggered']
+            chicago_time = convert_to_central_time(initial_timestamp)
+            timestamp = chicago_time.isoformat().split('.')[0]
+            states['washer_done_last_fired'] = timestamp
+        if item['entity_id'] == 'automation.notify_when_laundry_dryer_is_done':
+            initial_timestamp = item['attributes']['last_triggered']
+            chicago_time = convert_to_central_time(initial_timestamp)
+            timestamp = chicago_time.isoformat().split('.')[0]
+            states['dryer_done_last_fired'] = timestamp
+        # Media
+        if item['entity_id'] == 'sensor.beastnas_plex':
+            states['plex_stream_count'] = item['state']
+        if item['entity_id'] == 'sensor.sabnzbd_status':
+            states['sab_status'] = item['state']
+        if item['entity_id'] == 'number.sabnzbd_speedlimit':
+            states['sab_speedlimit'] = item['state']
+        if item['entity_id'] == 'sensor.sabnzbd_speed':
+            speed = str(round(float(item['state']), 1))
+            unit = item['attributes']['unit_of_measurement']
+            states['sab_speed'] = f'{speed} {unit}'
+        if item['entity_id'] == 'sensor.sabnzbd_queue_count':
+            states['sab_queue'] = item['state']
+        if item['entity_id'] == 'sensor.sabnzbd_total_disk_space':
+            total_disk = round(float(item['state']) / 1000, 2)
+            states['sab_total_disk'] = total_disk
+        if item['entity_id'] == 'sensor.sabnzbd_free_disk_space':
+            rounded_reading = round(float(item['state']) / 1000, 2)
+            rounded_reading_str = str(rounded_reading)
+            total_disk_str = str(states['sab_total_disk'])
+            states['nas_free_disk'] = f'{rounded_reading_str}/{total_disk_str}TB'
+        if item['entity_id'] == 'sensor.deluge_download_speed':
+            states['deluge_download_speed'] = item['state'] + item['attributes']['unit_of_measurement']
+        if item['entity_id'] == 'sensor.deluge_upload_speed':
+            states['deluge_upload_speed'] = item['state'] + item['attributes']['unit_of_measurement']
+        if item['entity_id'] == 'sensor.deluge_status':
+            states['deluge_status'] = item['state']
 
 @app.route('/')
 def hello():
@@ -212,7 +357,10 @@ def hello():
 
 @app.route('/states/all')
 def states_all():
-    return states | weather
+    resp = {}
+    resp['ha'] = states
+    resp['weather'] = weather
+    return resp
 
 ### Main
 if __name__ == "__main__":
