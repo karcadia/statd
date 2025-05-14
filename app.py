@@ -255,7 +255,7 @@ def fetch_ha_states():
             msg = str(rounded_reading) + 'KWh/mon'
             states['washer_1mon'] = msg
             washer_cost = round(rounded_reading * 0.092, 2)
-            cost_msg = str(washer_cost) + '/mon'
+            cost_msg = '$' + str(washer_cost) + '/mon'
             states['washer_1mon_cost'] = cost_msg
         if item['entity_id'] == 'sensor.dryer_1min':
             rounded_reading = float(item['state']) // 1
@@ -266,7 +266,7 @@ def fetch_ha_states():
             msg = str(rounded_reading) + 'KWh/mon'
             states['dryer_1mon'] = msg
             dryer_cost = round(rounded_reading * 0.092, 2)
-            dryer_cost_msg = str(dryer_cost) + '/mon'
+            dryer_cost_msg = '$' + str(dryer_cost) + '/mon'
             states['dryer_1mon_cost'] = dryer_cost_msg
         # Indoor Conditions and Air
         if item['entity_id'] == 'switch.air_filter':
@@ -360,7 +360,7 @@ def states_all():
     resp = {}
     resp['ha'] = states
     resp['weather'] = weather
-    return resp
+    return json.dumps(resp)
 
 ### Main
 if __name__ == "__main__":
