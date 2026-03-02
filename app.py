@@ -517,12 +517,10 @@ def refresh_emporia_data():
             dryer = device
     washer_usage_dict = vue.get_device_list_usage(deviceGids=washer.device_gid, instant=None, scale=Scale.SECOND.value, unit=Unit.KWH.value)
     dryer_usage_dict  = vue.get_device_list_usage(deviceGids=dryer.device_gid,  instant=None, scale=Scale.SECOND.value, unit=Unit.KWH.value)
-    emporia['Washer'] = {}
-    emporia['Dryer']  = {}
     washer_usage_watt = washer_usage_dict[washer.device_gid].channels['1,2,3'].usage * 3600 * 1000
     dryer_usage_watt  = dryer_usage_dict[dryer.device_gid].channels['1,2,3'].usage * 3600 * 1000
-    emporia['Washer']['Usage'] = str(round(washer_usage_watt, 3)) + 'W'
-    emporia['Dryer']['Usage'] = str(round(dryer_usage_watt, 3)) + 'W'
+    emporia['Washer'] = str(round(washer_usage_watt, 3)) + 'W'
+    emporia['Dryer']  = str(round(dryer_usage_watt, 3)) + 'W'
 
 @app.route('/')
 def hello():
