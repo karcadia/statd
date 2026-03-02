@@ -13,6 +13,8 @@ import requests
 from flask import Flask
 from flask_wtf.csrf import CSRFProtect
 import pytz
+import pyemvue
+from pyemvue.enums import Scale, Unit
 
 HA_TOKEN = os.getenv('HA_TOKEN')
 if not HA_TOKEN:
@@ -22,16 +24,29 @@ WEATHER_TOKEN = os.getenv('WEATHER_TOKEN')
 if not WEATHER_TOKEN:
     print('App cannot start without a WEATHER_TOKEN.')
     exit(1)
+PLEX_TOKEN = os.getenv('PLEX_TOKEN')
+if not PLEX_TOKEN:
+    print('App cannot start without a PLEX_TOKEN.')
+    exit(1)
+EMPORIA_USERNAME = os.getenv('EMPORIA_USERNAME')
+if not EMPORIA_USERNAME:
+    print('App cannot start without an EMPORIA_USERNAME.')
+    exit(1)
+EMPORIA_PASSWORD = os.getenv('EMPORIA_PASSWORD')
+if not EMPORIA_PASSWORD:
+    print('App cannot start without an EMPORIA_PASSWORD.')
+    exit(1)
 
 ### Global Vars
 APP_NAME = 'statd'
-DEBUG = False
-HA_API = 'https://mccormicom.com:8123/api'
-HEADERS = {
-        "Authorization": f"Bearer {HA_TOKEN}",
-        "content-type": "application/json"
+DEBUG    = False
+RUN      = True
+HA_API   = 'https://mccormicom.com:8123/api'
+PLEX_API = 'http://mccormicom.com:32400/'
+HEADERS  = {
+    "Authorization": f"Bearer {HA_TOKEN}",
+    "content-type": "application/json"
     }
-RUN = True
 
 ## Init
 # Pull current time and timezone.
@@ -62,9 +77,38 @@ csrf = CSRFProtect()
 csrf.init_app(app)
 states = {}
 weather = {}
+plex = {}
+emporia = {}
 poll_world_weather = True
 
 ### Global Functions
+def start_threads():
+    # There is a good chance that HomeAssistant is restarting along with statd.
+    # Pause for a moment to give HA time to wake up.
+    time.sleep(1)
+    wuptime = None
+    while RUN:
+        #hthread = threading.Thread(target=fetch_ha_states)
+        #hthread.start()
+        empthread = threading.Thread(target=refresh_emporia_data)
+        empthread.start()
+        psthread = threading.Thread(target=refresh_plex_streams, args=(PLEX_TOKEN,))
+        psthread.start()
+        prthread = threading.Thread(target=refresh_plex_recently_added, args=(PLEX_TOKEN,))
+        prthread.start()
+        now = datetime.datetime.now()
+        if wuptime:
+            delta = now.timestamp() - wuptime.timestamp()
+            if delta > 899:
+                wthread = threading.Thread(target=refresh_worldweather)
+                wthread.start()
+                wuptime = datetime.datetime.now()
+        if not wuptime:
+            wthread = threading.Thread(target=refresh_worldweather)
+            wthread.start()
+            wuptime = datetime.datetime.now()
+        time.sleep(5)
+
 def convert_to_central_time(utc_string):
     utc_time = datetime.datetime.fromisoformat(utc_string)
     chicago = pytz.timezone('America/Chicago')
@@ -111,24 +155,6 @@ def calc_wind_arrow(bearing):
         return '\u2198'
     elif dir == 'Southwest':
         return '\u2199'
-
-def start_threads():
-    wuptime = None
-    while RUN:
-        hthread = threading.Thread(target=fetch_ha_states)
-        hthread.start()
-        now = datetime.datetime.now()
-        if wuptime:
-            delta = now.timestamp() - wuptime.timestamp()
-            if delta > 899:
-                wthread = threading.Thread(target=refresh_worldweather)
-                wthread.start()
-                wuptime = datetime.datetime.now()
-        if not wuptime:
-            wthread = threading.Thread(target=refresh_worldweather)
-            wthread.start()
-            wuptime = datetime.datetime.now()
-        time.sleep(5)
 
 def refresh_worldweather():
     global poll_world_weather
@@ -239,7 +265,7 @@ def fetch_ha_states():
             holiday_start_trim = holiday_start.split(' ')[0]
             if today_date == holiday_start_trim:
                 holiday_flashy = f"* {holiday} *"
-                holiday_trim = holiday_flashy[0:MAX_WIDTH]
+                holiday_trim = holiday_flashy
                 states['holiday'] = holiday_trim
         # Laundry
         if item['entity_id'] == 'switch.switch_washer':
@@ -351,6 +377,153 @@ def fetch_ha_states():
         if item['entity_id'] == 'sensor.deluge_status':
             states['deluge_status'] = item['state']
 
+def refresh_plex_recently_added(PLEX_TOKEN):
+    log.info('Refreshing plex recently added.')
+    headers = {'X-Plex-Token': PLEX_TOKEN}
+    try:
+        plex_recently_added_xml = requests.get(PLEX_API + 'library/sections/2/newest', headers=headers)
+    except ConnectionError:
+        log.warning('Plex appears to be down.')
+        return
+    tv_xml = ElementTree.fromstring(plex_recently_added_xml.text)
+
+    tvshows = []
+    for item in tv_xml:
+        new_episode = {}
+        new_episode['season_name'] = item.attrib['parentTitle'].replace('Season ', 'S')
+        new_episode['episode_number'] = item.attrib['index']
+        if 'updatedAt' in item.attrib.keys():
+            new_episode['epoch_updated'] = item.attrib['updatedAt']
+        new_episode['epoch_added'] = item.attrib['addedAt']
+        new_episode['show_name'] = item.attrib['grandparentTitle']
+        tvshows.append(new_episode)
+
+    try:
+        plex_recently_added_xml = requests.get(PLEX_API + 'library/sections/1/newest', headers=headers)
+    except ConnectionError:
+        log.warning('Connection to Plex failed.')
+        return
+    movie_xml = ElementTree.fromstring(plex_recently_added_xml.text)
+
+    movies = []
+    for item in movie_xml:
+        new_movie = {}
+        new_movie['title'] = item.attrib['title']
+        new_movie['year'] = item.attrib['year']
+        new_movie['epoch_added'] = item.attrib['addedAt']
+        movies.append(new_movie)
+
+    movies = sorted(movies, key=lambda d: d['epoch_added'], reverse=True)
+    tvshows = sorted(tvshows, key=lambda d: d['epoch_added'], reverse=True)
+
+    plex['new'] = {}
+    if len(movies) == 0:
+        plex['new']['movies'] = []
+    elif len(movies) == 1:
+        new_movie = movies[0]['year'] + ' ' + movies[0]['title']
+        plex['new']['movies'] = new_movie
+    elif len(movies) == 2:
+        new_movie = movies[0]['year'] + ' ' + movies[0]['title']
+        new_movie2 = movies[1]['year'] + ' ' + movies[1]['title']
+        plex['new']['movies'] = new_movie + '\n' + new_movie2
+    else:
+        new_movie = movies[0]['year'] + ' ' + movies[0]['title']
+        new_movie2 = movies[1]['year'] + ' ' + movies[1]['title']
+        new_movie3 = movies[2]['year'] + ' ' + movies[2]['title']
+        plex['new']['movies'] = new_movie + '\n' + new_movie2 + '\n' + new_movie3
+    if len(tvshows) == 0:
+        plex['new']['episodes'] = []
+    elif len(tvshows) == 1:
+        new_episode =  tvshows[0]['show_name'] + ' ' + tvshows[0]['season_name'] + 'E' + tvshows[0]['episode_number']
+        plex['new']['episodes'] = new_episode
+    elif len(tvshows) == 2:
+        new_episode =  tvshows[0]['show_name'] + ' ' + tvshows[0]['season_name'] + 'E' + tvshows[0]['episode_number']
+        new_episode2 = tvshows[1]['show_name'] + ' ' + tvshows[1]['season_name'] + 'E' + tvshows[1]['episode_number']
+        plex['new']['episodes'] = new_episode + '\n' + new_episode2
+    else:
+        new_episode =  tvshows[0]['show_name'] + ' ' + tvshows[0]['season_name'] + 'E' + tvshows[0]['episode_number']
+        new_episode2 = tvshows[1]['show_name'] + ' ' + tvshows[1]['season_name'] + 'E' + tvshows[1]['episode_number']
+        new_episode3 = tvshows[2]['show_name'] + ' ' + tvshows[2]['season_name'] + 'E' + tvshows[2]['episode_number']
+        plex['new']['episodes'] = new_episode + '\n' + new_episode2 + '\n' + new_episode3
+    log.info('Finished refreshing plex recently added.')
+
+def refresh_plex_streams(PLEX_TOKEN):
+    log.info('Fetching stream states from plex.')
+    headers = {'X-Plex-Token': PLEX_TOKEN}
+    try:
+        plex_sessions_xml = requests.get(PLEX_API + 'status/sessions', headers=headers)
+    except ConnectionError:
+        log.warning('Plex appears to be down.')
+        return
+    xml_tree = ElementTree.fromstring(plex_sessions_xml.text)
+    streams = []
+    for stream in xml_tree:
+        stream_item = {}
+        stream_item['type'] = stream.attrib['type']
+        stream_item['title'] = stream.attrib['title']
+        if 'parentTitle' in stream.attrib.keys():
+            if stream_item['type'] == 'episode':
+                stream_item['season'] = stream.attrib['parentTitle']
+            elif stream_item['type'] == 'track':
+                stream_item['album'] = stream.attrib['parentTitle']
+        if 'grandparentTitle' in stream.attrib.keys():
+            if stream_item['type'] == 'episode':
+                stream_item['tv_show'] = stream.attrib['grandparentTitle']
+            elif stream_item['type'] == 'track':
+                stream_item['artist'] = stream.attrib['grandparentTitle']
+            else:
+                stream_item['grandparent'] = stream.attrib['grandparentTitle']
+        for child in stream:
+            if child.tag == 'User' and 'title' in child.attrib.keys():
+                stream_item['user'] = child.attrib['title']
+            if child.tag == 'Media' and 'videoResolution' in child.attrib.keys():
+                stream_item['video_resolution'] = child.attrib['videoResolution']
+            if child.tag == 'Session' and 'location' in child.attrib.keys():
+                stream_item['location'] = child.attrib['location']
+            if child.tag == 'Player' and 'state' in child.attrib.keys():
+                stream_item['state'] = child.attrib['state']
+            if child.tag == 'Player' and 'remotePublicAddress' in child.attrib.keys():
+                remote_ip = child.attrib['remotePublicAddress']
+                if '127.0.0.1' not in remote_ip and '192.168.' not in remote_ip:
+                    stream_item['ip'] = remote_ip
+        streams.append(stream_item)
+    clean_streams = []
+    for stream in streams:
+        if stream['type'] == 'track':
+            s = f"{stream['user']} \u266c {stream['artist']}."
+            clean_streams.append(s)
+        elif stream['type'] == 'movie':
+            s = f"{stream['user']} \u2680 {stream['title']}."
+            clean_streams.append(s)
+        elif stream['type'] == 'episode':
+            season = stream['season'].replace('Season ', 'S')
+            title = stream['title']
+            s = f"{stream['user']} \u30ed {stream['tv_show']} {season} - {title}."
+            clean_streams.append(s)
+    plex['streams'] = clean_streams
+
+def refresh_emporia_data():
+    log.info('Fetching Emporia data.')
+    vue = pyemvue.PyEmVue()
+    login_response = vue.login(EMPORIA_USERNAME, EMPORIA_PASSWORD, token_storage_file='keys.json')
+    if not login_response:
+        log.warning('Failed to authenticate to Emporia.')
+        return
+    devices = vue.get_devices()
+    for device in devices:
+        if device.device_name == 'Washer':
+            washer = device
+        if device.device_name == 'Dryer':
+            dryer = device
+    washer_usage_dict = vue.get_device_list_usage(deviceGids=washer.device_gid, instant=None, scale=Scale.SECOND.value, unit=Unit.KWH.value)
+    dryer_usage_dict  = vue.get_device_list_usage(deviceGids=dryer.device_gid,  instant=None, scale=Scale.SECOND.value, unit=Unit.KWH.value)
+    emporia['Washer'] = {}
+    emporia['Dryer']  = {}
+    washer_usage_watt = washer_usage_dict[washer.device_gid].channels['1,2,3'].usage * 3600 * 1000
+    dryer_usage_watt  = dryer_usage_dict[dryer.device_gid].channels['1,2,3'].usage * 3600 * 1000
+    emporia['Washer']['Usage'] = str(round(washer_usage_watt, 3)) + 'W'
+    emporia['Dryer']['Usage'] = str(round(dryer_usage_watt, 3)) + 'W'
+
 @app.route('/')
 def hello():
     return('OK')
@@ -360,7 +533,13 @@ def states_all():
     resp = {}
     resp['ha'] = states
     resp['weather'] = weather
+    resp['plex'] = plex
+    resp['emporia'] = emporia
     return json.dumps(resp)
+
+@app.route('/states/plex')
+def states_plex():
+    return json.dumps(plex)
 
 ### Main
 if __name__ == "__main__":
