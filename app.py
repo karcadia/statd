@@ -534,6 +534,7 @@ def refresh_sabnzbd():
     resp = requests.request('GET', url=url)
     sab_queue = json.loads(resp.text)
     sabnzbd['sab_status']           = sab_queue['queue']['status']
+    sabnzbd['sab_queue_speed']      = sab_queue['queue']['speed']
     sabnzbd['sab_queue_size']       = sab_queue['queue']['noofslots']
     sabnzbd['sab_queue_space_left'] = sab_queue['queue']['sizeleft']
     sabnzbd['sab_queue_time_left']  = sab_queue['queue']['timeleft']
