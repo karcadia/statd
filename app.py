@@ -533,6 +533,8 @@ def refresh_sabnzbd():
     url = f"http://nas.mccormicom.com:8081/api?apikey={SABNZBD_API_KEY}&output=json&mode=queue"
     resp = requests.request('GET', url=url)
     sab_queue = json.loads(resp.text)
+    print(sab_queue)
+    log.info(sab_queue)
     sabnzbd['status'] = sab_queue.queue.status
     sabnzbd['queue_size'] = sab_queue.queue.noofslots
     sabnzbd['queue_space_left'] = sab_queue.queue.sizeleft
