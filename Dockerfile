@@ -1,13 +1,10 @@
 FROM alpine
 
-RUN apk add uv
+RUN apk add python3 py3-virtualenv uv
 
 COPY all.env /app/
 COPY app.py /app/
 COPY pyproject.toml /app/
-
-WORKDIR /app
-RUN uv sync
 
 # Create a non-root account and switch to it.
 RUN adduser -Du 1111 statd && chown 1111:1111 /app -R
