@@ -538,9 +538,9 @@ def refresh_sabnzbd():
     sabnzbd['status'] = sab_queue['queue']['status']
     sabnzbd['queue_size'] = sab_queue['queue']['noofslots']
     sabnzbd['queue_space_left'] = sab_queue['queue']['sizeleft']
-    sabnzbd['queue_time_left'] = sab_queue['queue']['timeleft']
-    sabnzbd['free_space'] = sab_queue.['queue']['diskspace1_norm']
-    sabnzbd['total_space'] = str(sab_queue['queue']['diskspacetotal1'] / 1000) + 'T'
+    sabnzbd['queue_time_left']  = sab_queue['queue']['timeleft']
+    sabnzbd['free_space']       = sab_queue['queue']['diskspace1_norm']
+    sabnzbd['total_space']      = str(int(sab_queue['queue']['diskspacetotal1']) / 1000) + 'T'
 
 @app.route('/')
 def hello():
