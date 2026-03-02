@@ -36,6 +36,10 @@ EMPORIA_PASSWORD = os.getenv('EMPORIA_PASSWORD')
 if not EMPORIA_PASSWORD:
     print('App cannot start without an EMPORIA_PASSWORD.')
     exit(1)
+SABNZBD_API_KEY = os.getenv('SABNZBD_API_KEY')
+if not SABNZBD_API_KEY:
+    print('App cannot start without an SABNZBD_API_KEY.')
+    exit(1)
 
 ### Global Vars
 APP_NAME = 'statd'
@@ -79,6 +83,7 @@ states = {}
 weather = {}
 plex = {}
 emporia = {}
+sabnzbd = {}
 poll_world_weather = True
 
 ### Global Functions
@@ -90,6 +95,8 @@ def start_threads():
     while RUN:
         #hthread = threading.Thread(target=fetch_ha_states)
         #hthread.start()
+        sabnzbd_thread = threading.Thread(target=refresh_sabnzbd)
+        sabnzbd_thread.start()
         empthread = threading.Thread(target=refresh_emporia_data)
         empthread.start()
         psthread = threading.Thread(target=refresh_plex_streams, args=(PLEX_TOKEN,))
@@ -522,6 +529,17 @@ def refresh_emporia_data():
     emporia['Washer'] = str(round(washer_usage_watt, 3)) + 'W'
     emporia['Dryer']  = str(round(dryer_usage_watt, 3)) + 'W'
 
+def refresh_sabnzbd():
+    url = f"http://nas.mccormicom.com:8081/api?apikey={SABNZBD_API_KEY}&output=json&mode=queue"
+    resp = requests.request('GET', url=url)
+    sab_queue = json.loads(resp.text)
+    sabnzbd['status'] = sab_queue.queue.status
+    sabnzbd['queue_size'] = sab_queue.queue.noofslots
+    sabnzbd['queue_space_left'] = sab_queue.queue.sizeleft
+    sabnzbd['queue_time_left'] = sab_queue.queue.timeleft
+    sabnzbd['free_space'] = sab_queue.queue.diskspace1_norm
+    sabnzbd['total_space'] = str(sab_queue.queue.diskspacetotal1 / 1000) + 'T'
+
 @app.route('/')
 def hello():
     return('OK')
@@ -533,6 +551,7 @@ def states_all():
     resp['weather'] = weather
     resp['plex'] = plex
     resp['emporia'] = emporia
+    resp['sabnzbd'] = sabnzbd
     return json.dumps(resp)
 
 @app.route('/states/plex')
