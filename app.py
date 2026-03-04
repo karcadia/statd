@@ -524,15 +524,15 @@ def refresh_emporia_data():
             dryer = device
     washer_usage_dict = vue.get_device_list_usage(deviceGids=washer.device_gid, instant=None, scale=Scale.SECOND.value, unit=Unit.KWH.value)
     dryer_usage_dict  = vue.get_device_list_usage(deviceGids=dryer.device_gid,  instant=None, scale=Scale.SECOND.value, unit=Unit.KWH.value)
-    washer_usage_watt = washer_usage_dict[washer.device_gid].channels['1,2,3'].usage * 3600 * 1000
-    dryer_usage_watt  = dryer_usage_dict[dryer.device_gid].channels['1,2,3'].usage * 3600 * 1000
+    washer_usage_watt = washer_usage_dict[washer.device_gid].channels['1,2,3'].usage * 3600
+    dryer_usage_watt  = dryer_usage_dict[dryer.device_gid].channels['1,2,3'].usage * 3600
     emporia['Washer'] = str(round(washer_usage_watt, 3)) + 'W'
     emporia['Dryer']  = str(round(dryer_usage_watt, 3)) + 'W'
 
 def refresh_sabnzbd():
     url = f"http://nas.mccormicom.com:8081/api?apikey={SABNZBD_API_KEY}&output=json&mode=queue"
-    resp = requests.request('GET', url=url)
-    sab_queue = json.loads(resp.text)
+    resp                            = requests.request('GET', url=url)
+    sab_queue                       = json.loads(resp.text)
     sabnzbd['sab_status']           = sab_queue['queue']['status']
     sabnzbd['sab_queue_speed']      = sab_queue['queue']['speed']
     sabnzbd['sab_queue_size']       = sab_queue['queue']['noofslots']
