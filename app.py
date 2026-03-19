@@ -87,13 +87,13 @@ else:
 app = Flask(__name__)
 csrf = CSRFProtect()
 csrf.init_app(app)
-states = {}
+states  = {}
 weather = {}
-plex = {}
+plex    = {}
 emporia = {}
 sabnzbd = {}
-router = {}
-router['updates'] = 0
+router  = {}
+router['router_updates'] = 0
 poll_world_weather = True
 
 ### Global Functions
@@ -103,8 +103,10 @@ def start_threads():
     time.sleep(1)
     wuptime = None
     while RUN:
+        # RIP HA
         #hthread = threading.Thread(target=fetch_ha_states)
         #hthread.start()
+        # Start the various threads to check the various downstream systems.
         sabnzbd_thread = threading.Thread(target=refresh_sabnzbd)
         sabnzbd_thread.start()
         empthread = threading.Thread(target=refresh_emporia_data)
@@ -115,6 +117,8 @@ def start_threads():
         prthread.start()
         routhread = threading.Thread(target=refresh_router_updates)
         routhread.start()
+        # Check if it has been at least 900 seconds since last we refreshed world weather.
+        # Or if this is the first run since app launch then refresh world weather.
         now = datetime.datetime.now()
         if wuptime:
             delta = now.timestamp() - wuptime.timestamp()
@@ -126,6 +130,7 @@ def start_threads():
             wthread = threading.Thread(target=refresh_worldweather)
             wthread.start()
             wuptime = datetime.datetime.now()
+        # Wait 5 seconds before repeating the loop.
         time.sleep(5)
 
 def convert_to_central_time(utc_string):
@@ -176,19 +181,25 @@ def calc_wind_arrow(bearing):
         return '\u2199'
 
 def refresh_worldweather():
+    # Abort the function if the global toggle is disabled.
     global poll_world_weather
     if not poll_world_weather:
         return
+
     log.info('Fetching states from WeatherWorld.')
+
+    # Prepare and send the API request.
     zipcode = 63021
     url = f'https://api.worldweatheronline.com/premium/v1/weather.ashx?key={WEATHER_TOKEN}&q={zipcode}'
     resp = requests.request('GET', url)
+
+    # Catch and handle the 429 condition.
     if resp.status_code == 429:
         log.error('WorldWeather API calls used up for the day.')
         poll_world_weather = False
         return
-#    with open('debug/weather_data.xml', 'w') as fw:
-#        fw.write(resp.text)
+
+    # Extract the relevant detail from the XML data.
     xml_data = ElementTree.fromstring(resp.text)
     weather['timestamp'] = datetime.datetime.now().isoformat().split('.')[0]
     weather['today_date'] = weather['timestamp'].split('T')[0]
@@ -585,13 +596,13 @@ def refresh_router_updates():
         req = requests.post(url, auth=(ROUTER_KEY, ROUTER_SECRET), verify=False)
         jd = json.loads(req.text)
     except ConnectionError:
-        router['status'] = 'DOWN'
+        router['router_status'] = 'DOWN'
         return
 
-    router['status'] = 'HEALTHY'
+    router['router_status'] = 'HEALTHY'
     for line in jd['log'].split('\n'):
         if 'package(s) will be affected' in line:
-            router['updates'] = line.split(' ')[2]
+            router['router_updates'] = line.split(' ')[2]
 
     # Kick off a firmware upgrade check. It will take a minute but we'll parse the results next execution.
     url = 'https://router.mccormicom.com/api/core/firmware/check'
