@@ -175,6 +175,8 @@ def refresh_worldweather():
         log.error('WorldWeather API calls used up for the day.')
         poll_world_weather = False
         return
+#    with open('debug/weather_data.xml', 'w') as fw:
+#        fw.write(resp.text)
     xml_data = ElementTree.fromstring(resp.text)
     weather['timestamp'] = datetime.datetime.now().isoformat().split('.')[0]
     weather['today_date'] = weather['timestamp'].split('T')[0]
@@ -188,6 +190,28 @@ def refresh_worldweather():
     weather['plus_3_timestamp'] = plus_3_timestamp.isoformat().split('.')[0]
     weather['plus_3_date'] = weather['plus_3_timestamp'].split('T')[0]
     for branch in xml_data:
+        if branch.tag == 'current_condition':
+            for branch_l2 in branch:
+                if branch_l2.tag == 'temp_F':
+                    weather['now_temp_f'] = branch_l2.text
+                if branch_l2.tag == 'weatherDesc':
+                    weather['weather_desc'] = branch_l2.text
+                if branch_l2.tag == 'windspeedMiles':
+                    weather['wind_speed_mph'] = branch_l2.text
+                if branch_l2.tag == 'winddir16Point':
+                    weather['wind_dir'] = branch_l2.text
+                if branch_l2.tag == 'precipInches':
+                    weather['precip_inches'] = branch_l2.text
+                if branch_l2.tag == 'humidity':
+                    weather['humidity'] = branch_l2.text
+                if branch_l2.tag == 'FeelsLikeF':
+                    weather['feels_like_f'] = branch_l2.text
+                if branch_l2.tag == 'pressureInches':
+                    weather['pressure_inches'] = branch_l2.text
+                if branch_l2.tag == 'cloudcover':
+                    weather['cloud_cover'] = branch_l2.text
+                if branch_l2.tag == 'uvIndex':
+                    weather['uv_index'] = branch_l2.text
         if branch.tag == 'weather':
             for branch_l2 in branch:
                 if branch_l2.tag == 'date' and branch_l2.text == weather['today_date']:
