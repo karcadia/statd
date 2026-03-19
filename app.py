@@ -113,6 +113,8 @@ def start_threads():
         psthread.start()
         prthread = threading.Thread(target=refresh_plex_recently_added, args=(PLEX_TOKEN,))
         prthread.start()
+        routhread = threading.Thread(target=refresh_router_updates)
+        routhread.start()
         now = datetime.datetime.now()
         if wuptime:
             delta = now.timestamp() - wuptime.timestamp()
