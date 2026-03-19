@@ -40,6 +40,14 @@ SABNZBD_API_KEY = os.getenv('SABNZBD_API_KEY')
 if not SABNZBD_API_KEY:
     print('App cannot start without an SABNZBD_API_KEY.')
     exit(1)
+ROUTER_KEY = os.getenv('ROUTER_KEY')
+if not ROUTER_KEY:
+    print('App cannot start without a ROUTER_KEY.')
+    exit(1)
+ROUTER_SECRET = os.getenv('ROUTER_SECRET')
+if not ROUTER_SECRET:
+    print('App cannot start without a ROUTER_SECRET.')
+    exit(1)
 
 ### Global Vars
 APP_NAME = 'statd'
@@ -84,6 +92,8 @@ weather = {}
 plex = {}
 emporia = {}
 sabnzbd = {}
+router = {}
+router['updates'] = 0
 poll_world_weather = True
 
 ### Global Functions
@@ -567,6 +577,24 @@ def refresh_sabnzbd():
     rounded_tb                      = round(totalspace_tb, 1)
     sabnzbd['sab_total_space']      = str(rounded_tb) + 'T'
 
+def refresh_router_updates():
+    url = 'https://router.mccormicom.com/api/core/firmware/upgradestatus'
+    try:
+        req = requests.post(url, auth=(ROUTER_KEY, ROUTER_SECRET), verify=False)
+        jd = json.loads(req.text)
+    except ConnectionError:
+        router['status'] = 'DOWN'
+        return
+
+    router['status'] = 'HEALTHY'
+    for line in jd['log'].split('\n'):
+        if 'package(s) will be affected' in line:
+            router['updates'] = line.split(' ')[2]
+
+    # Kick off a firmware upgrade check. It will take a minute but we'll parse the results next execution.
+    url = 'https://router.mccormicom.com/api/core/firmware/check'
+    req = requests.post(url, auth=(ROUTER_KEY, ROUTER_SECRET), verify=False)
+
 @app.route('/')
 def hello():
     return('OK')
@@ -579,6 +607,7 @@ def states_all():
     resp['plex'] = plex
     resp['emporia'] = emporia
     resp['sabnzbd'] = sabnzbd
+    resp['router'] = router
     return json.dumps(resp)
 
 @app.route('/states/plex')
