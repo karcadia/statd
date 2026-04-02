@@ -591,6 +591,7 @@ def refresh_sabnzbd():
     sabnzbd['sab_total_space']      = str(rounded_tb) + 'T'
 
 def refresh_router_updates():
+    log.info('Fetching Emporia data.')
     # fetch the router upgrades available
     url = 'https://router.mccormicom.com/api/core/firmware/upgradestatus'
     try:
@@ -618,7 +619,7 @@ def refresh_router_updates():
         router['router_status'] = 'DOWN'
         return
 
-    print(jd)
+    log.info(jd)
 
 @app.route('/')
 def hello():
