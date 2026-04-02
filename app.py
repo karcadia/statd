@@ -634,12 +634,15 @@ def refresh_router_updates():
             router['outbound_speed'] = str(delta) + unit
         if bytes_received > router['bytes_received']:
             delta = int(bytes_received) - int(router['bytes_received'])
+            delta = delta / 5
             if delta > 1000000:
-                unit = 'M'
+                unit = 'Mbps'
                 delta = delta / 1000000
             elif delta > 1000:
-                unit = 'K'
+                unit = 'Kbps'
                 delta = delta / 1000
+            else:
+                unit = 'Bps'
             router['inbound_speed'] = str(delta) + unit
 
     router['bytes_transmitted'] = bytes_transmitted
