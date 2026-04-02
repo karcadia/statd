@@ -619,7 +619,31 @@ def refresh_router_updates():
         router['router_status'] = 'DOWN'
         return
 
-    log.info(jd['interfaces']['wan']['bytes transmitted'])
+    bytes_transmitted = jd['interfaces']['wan']['bytes transmitted']
+    bytes_received    = jd['interfaces']['wan']['bytes received']
+
+    if router['bytes_transmitted']:
+        if bytes_transmitted > router['bytes_transmitted']:
+            delta = bytes_transmitted = router['bytes_transmitted']
+            if delta > 1000000:
+                unit = 'M'
+                delta = delta / 1000000
+            elif delta > 1000
+                unit = 'K'
+                delta = delta / 1000
+            router['outbound_speed'] = str(delta) + unit
+        if bytes_received > router['bytes_received']:
+            delta = bytes_received - router['bytes_received']
+            if delta > 1000000:
+                unit = 'M'
+                delta = delta / 1000000
+            elif delta > 1000
+                unit = 'K'
+                delta = delta / 1000
+            router['inbound_speed'] = str(delta) + unit
+
+    router['bytes_transmitted'] = bytes_transmitted
+    router['bytes_received'] = bytes_received
 
 @app.route('/')
 def hello():
