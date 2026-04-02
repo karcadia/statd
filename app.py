@@ -624,7 +624,7 @@ def refresh_router_updates():
 
     if 'bytes_transmitted' in router:
         if bytes_transmitted > router['bytes_transmitted']:
-            delta = bytes_transmitted = router['bytes_transmitted']
+            delta = bytes_transmitted - router['bytes_transmitted']
             if delta > 1000000:
                 unit = 'M'
                 delta = delta / 1000000
