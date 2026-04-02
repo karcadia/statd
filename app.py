@@ -628,7 +628,7 @@ def refresh_router_updates():
             if delta > 1000000:
                 unit = 'M'
                 delta = delta / 1000000
-            elif delta > 1000
+            elif delta > 1000:
                 unit = 'K'
                 delta = delta / 1000
             router['outbound_speed'] = str(delta) + unit
@@ -637,7 +637,7 @@ def refresh_router_updates():
             if delta > 1000000:
                 unit = 'M'
                 delta = delta / 1000000
-            elif delta > 1000
+            elif delta > 1000:
                 unit = 'K'
                 delta = delta / 1000
             router['inbound_speed'] = str(delta) + unit
