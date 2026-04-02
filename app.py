@@ -619,7 +619,7 @@ def refresh_router_updates():
         router['router_status'] = 'DOWN'
         return
 
-    log.info(jd['interfaces']['wan']['bytes_transmitted'])
+    log.info(jd['interfaces']['wan']['bytes transmitted'])
 
 @app.route('/')
 def hello():
