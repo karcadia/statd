@@ -591,6 +591,7 @@ def refresh_sabnzbd():
     sabnzbd['sab_total_space']      = str(rounded_tb) + 'T'
 
 def refresh_router_updates():
+    # fetch the router upgrades available
     url = 'https://router.mccormicom.com/api/core/firmware/upgradestatus'
     try:
         req = requests.post(url, auth=(ROUTER_KEY, ROUTER_SECRET), verify=False)
@@ -607,6 +608,17 @@ def refresh_router_updates():
     # Kick off a firmware upgrade check. It will take a minute but we'll parse the results next execution.
     url = 'https://router.mccormicom.com/api/core/firmware/check'
     req = requests.post(url, auth=(ROUTER_KEY, ROUTER_SECRET), verify=False)
+
+    # fetch the router transfer rates
+    url = 'https://router.mccormicom.com/api/diagnostics/traffic/_interface'
+    try:
+        req = requests.post(url, auth=(ROUTER_KEY, ROUTER_SECRET), verify=False)
+        jd = json.loads(req.text)
+    except ConnectionError:
+        router['router_status'] = 'DOWN'
+        return
+
+    print(jd)
 
 @app.route('/')
 def hello():
