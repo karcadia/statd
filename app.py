@@ -622,7 +622,7 @@ def refresh_router_updates():
     bytes_transmitted = jd['interfaces']['wan']['bytes transmitted']
     bytes_received    = jd['interfaces']['wan']['bytes received']
 
-    if router['bytes_transmitted']:
+    if 'bytes_transmitted' in router:
         if bytes_transmitted > router['bytes_transmitted']:
             delta = bytes_transmitted = router['bytes_transmitted']
             if delta > 1000000:
