@@ -602,9 +602,13 @@ def refresh_router_updates():
         return
 
     router['router_status'] = 'HEALTHY'
+    updates_found = False
     for line in jd['log'].split('\n'):
         if 'package(s) will be affected' in line:
+            updates_found = True
             router['router_updates'] = line.split(' ')[2]
+    if not updates_found:
+        router['router_updates'] = "0"
 
     # Kick off a firmware upgrade check. It will take a minute but we'll parse the results next execution.
     url = 'https://router.mccormicom.com/api/core/firmware/check'
@@ -625,7 +629,7 @@ def refresh_router_updates():
     if 'bytes_transmitted' in router:
         if bytes_transmitted > router['bytes_transmitted']:
             delta = int(bytes_transmitted) - int(router['bytes_transmitted'])
-            delta = delta / 5
+            delta = round(delta / 5, 2)
             if delta > 1000000:
                 unit = 'Mbps'
                 delta = round(delta / 1000000, 2)
@@ -637,7 +641,7 @@ def refresh_router_updates():
             router['outbound_speed'] = str(delta) + unit
         if bytes_received > router['bytes_received']:
             delta = int(bytes_received) - int(router['bytes_received'])
-            delta = delta / 5
+            delta = round(delta / 5, 2)
             if delta > 1000000:
                 unit = 'Mbps'
                 delta = round(delta / 1000000, 2)
